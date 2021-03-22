@@ -3,9 +3,15 @@ package samples;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.vertx.ext.web.client.WebClientOptions;
+import io.vertx.mutiny.core.Vertx;
+import io.vertx.mutiny.ext.web.client.WebClient;
+import io.vertx.mutiny.ext.web.codec.BodyCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
@@ -16,6 +22,19 @@ import java.time.Duration;
 public class Api {
 
     private static final Logger logger = LoggerFactory.getLogger(Api.class);
+
+    private WebClient webClient;
+
+    @Inject
+    Vertx vertx;
+
+    @PostConstruct
+    void init() {
+        webClient = WebClient.create(vertx, new WebClientOptions()
+                .setDefaultPort(443)
+                .setDefaultHost("api.chucknorris.io")
+                .setSsl(true));
+    }
 
     @GET
     @Path("hello")
@@ -33,6 +52,19 @@ public class Api {
         return Uni.createFrom().item("Hello!")
                 .onItem().delayIt().by(Duration.ofSeconds(5))
                 .onItem().invoke(item -> logger.info("Delayed item: {}", item));
+    }
+
+    @GET
+    @Path("async-request")
+    public Uni<String> asyncRequest() {
+        logger.info("async-request");
+        return webClient.get("/jokes/random")
+                .timeout(5000)
+                .putHeader("Accept", "application/json")
+                .as(BodyCodec.jsonObject())
+                .send()
+                .onItem().transform(response -> response.body().getString("value"))
+                .onFailure().recoverWithItem("Chuck Norris is sleeping");
     }
 
     @GET
